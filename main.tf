@@ -1,5 +1,10 @@
 provider "azurerm" {
-  features {}
+  features {
+    key_vault {
+      purge_soft_delete_on_destroy    = true
+      recover_soft_deleted_key_vaults = true
+    }
+  }
 }
 
 variable "rg_name" {
@@ -12,15 +17,20 @@ variable "location" {
   default = "West Europe"
 }
 
+variable "dns_zone" {
+  type    = string
+  default = "anilv.azure.integrella.net"
+}
+
+#App-Vnet
 resource "azurerm_virtual_network" "example" {
   name = "App-vnet"
   location   = var.location
   resource_group_name = var.rg_name
   address_space = ["10.0.0.0/16"]
-  dns_servers= ["10.0.0.4", "10.0.0.5"]
 }
 
-#Subnets 
+#Subnets of App Vnet
 
 resource "azurerm_subnet" "example" {
   name  = "App-subnet"
@@ -35,6 +45,92 @@ resource "azurerm_subnet" "example2" {
   virtual_network_name = azurerm_virtual_network.example.name
   address_prefixes     = ["10.0.2.0/24"]
 }
+
+# ............
+
+# # Hub Vnet
+# resource "azurerm_virtual_network" "hub_vnet" {
+#   name                = "Hub-vnet"
+#   location            = var.location
+#   resource_group_name = var.rg_name
+#   address_space       = ["10.0.0.0/16"]
+# }
+
+# # Subnet of Hub Vnet
+# resource "azurerm_subnet" "hub_subnet" {
+#   name                  = "AzureFirewallSubnet"
+#   resource_group_name   = var.rg_name
+#   virtual_network_name  = azurerm_virtual_network.hub_vnet.name
+#   address_prefixes      = ["10.0.1.0/24"]
+# }
+
+# # PIP for Firewall
+# resource "azurerm_public_ip" "firewall_pip" {
+#   name                = "MyFirewall-PIP"
+#   location            = var.location
+#   resource_group_name = var.rg_name
+#   allocation_method   = "Static"
+#   sku                 = "Standard"
+# }
+
+# # Create Firewall
+# resource "azurerm_firewall" "example" {
+#   name                = "MyFirewall"
+#   location            = var.location
+#   resource_group_name = var.rg_name
+#   sku_name            = "AZFW_VNet"
+#   sku_tier            = "Standard"
+
+#   ip_configuration {
+#     name                 = "configuration-MyFirewall"
+#     subnet_id            = azurerm_subnet.hub_subnet.id
+#     public_ip_address_id = azurerm_public_ip.firewall_pip.id
+#   }
+# }
+
+# # Keyvault
+# data "azurerm_client_config" "current" {}
+
+# resource "azurerm_key_vault" "example" {
+#   name                        = "MyKeyvault-anil"
+#   location                    = var.location
+#   resource_group_name         = var.rg_name
+#   enabled_for_disk_encryption = true
+#   tenant_id                   = data.azurerm_client_config.current.tenant_id
+#   soft_delete_retention_days  = 7
+#   purge_protection_enabled    = false
+
+#   sku_name = "standard"
+
+#   access_policy {
+#     tenant_id = data.azurerm_client_config.current.tenant_id
+#     object_id = data.azurerm_client_config.current.object_id
+
+#     key_permissions    = ["Get"]
+#     secret_permissions = ["Get"]
+#     storage_permissions = ["Get"]
+#   }
+# }
+
+# # Route
+# resource "azurerm_route_table" "example" {
+#   name                = "acceptanceTestRouteTable1"
+#   location            = var.location
+#   resource_group_name = var.rg_name
+# }
+
+# resource "azurerm_route" "example" {
+#   name                = "acceptanceTestRoute1-anil"
+#   resource_group_name = var.rg_name
+#   route_table_name    = azurerm_route_table.example.name
+#   address_prefix      = "0.0.0.0/0"
+#   next_hop_type       = "Internet"
+# }
+
+# resource "azurerm_subnet_route_table_association" "example" {
+#   subnet_id      = azurerm_subnet.hub_subnet.id
+#   route_table_id = azurerm_route_table.example.id
+# }
 
 
 # Public IP for VM-with-Reverse-proxy
@@ -63,7 +159,7 @@ resource "azurerm_network_security_group" "example_nsg" {
     destination_port_range     = "22"
     source_address_prefix= "*"
     destination_address_prefix = "*"
-  }
+    }
 
   security_rule {
     name = "AllowHTTP"
@@ -93,7 +189,7 @@ resource "azurerm_network_interface" "example_nic" {
   ip_configuration {
     name  = "testconfiguration1"
     subnet_id   = azurerm_subnet.example.id
-    private_ip_address_allocation = "Dynamic"
+    private_ip_address_allocation = "Static"
     public_ip_address_id = azurerm_public_ip.example.id
   }
 }
@@ -130,29 +226,29 @@ resource "azurerm_linux_virtual_machine" "example_linux_vm" {
 
 #DNS Zone 
 
-resource "azurerm_dns_zone" "dns_zone" {
-  name= "salesforce5259.com"
-  resource_group_name = var.rg_name
-}
+# resource "azurerm_dns_zone" "dns_zone" {
+#   name= "salesforce5259.com"
+#   resource_group_name = var.rg_name
+# }
 
 #DNS Record Set
 
-resource "azurerm_dns_a_record" "dns_zone_record" {
-  name= "DNS-Zone-Record"
-  zone_name   = azurerm_dns_zone.dns_zone.name
-  resource_group_name = var.rg_name
-  ttl = 300
-  target_resource_id  = azurerm_public_ip.example2.id
-}
+# resource "azurerm_dns_a_record" "dns_zone_record" {
+#   name= "DNS-Zone-Record"
+#   zone_name   = var.dns_zone
+#   resource_group_name = var.rg_name
+#   ttl = 300
+#   target_resource_id  = azurerm_public_ip.example2.id
+# }
 
-# Public IP accocited with AppGW
+## Public IP accocited with AppGW
 
 resource "azurerm_public_ip" "example2" {
   name = "AppGW-PIP"
   resource_group_name = var.rg_name
   location   = var.location
-  sku = "Standard"
-  allocation_method = "Static"
+  sku = "Basic"
+  allocation_method = "Dynamic"
 }
 
 # Application gateway
@@ -163,8 +259,8 @@ resource "azurerm_application_gateway" "example_application_gateway"{
   resource_group_name = var.rg_name
 
   sku {
-    name = "Standard_v2"
-    tier = "Standard_v2"
+    name = "WAF_Medium"
+    tier = "WAF"
     capacity = 2
   }
 
@@ -180,7 +276,8 @@ resource "azurerm_application_gateway" "example_application_gateway"{
 
  frontend_ip_configuration {
   name = "myAGIPConfig"
-  public_ip_address_id = azurerm_public_ip.example2.id
+  #  subnet_id = azurerm_subnet.example2.id
+   public_ip_address_id = azurerm_public_ip.example2.id
  }
  
  backend_address_pool {
@@ -209,7 +306,15 @@ resource "azurerm_application_gateway" "example_application_gateway"{
   http_listener_name     = "myListener"
   backend_address_pool_name = "example-backend-pool"
   backend_http_settings_name = "myHTTPsetting"
-  priority = 1
  }
 
 }
+
+resource "azurerm_network_interface_application_gateway_backend_address_pool_association" "example" {
+  network_interface_id    = azurerm_network_interface.example_nic.id
+  ip_configuration_name   = "testconfiguration1"
+  backend_address_pool_id = tolist(azurerm_application_gateway.example_application_gateway.backend_address_pool).0.id
+}
+
+
+
