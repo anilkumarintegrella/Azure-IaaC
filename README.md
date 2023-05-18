@@ -17,7 +17,7 @@ In today's digital age, businesses are constantly looking for ways to streamline
 
 #### Covered the following Azure components during the project:
 
--   Resource group
+- Resource group
 - DNS Zone
 - Public IP
 - Virtual Machine
@@ -73,7 +73,7 @@ In today's digital age, businesses are constantly looking for ways to streamline
 
 4. Apply the Changes:
 
-    - Run the command terraform apply. Terraform will create or modify the specified resources based on your configuration.
+    - Run the command `terraform apply`. Terraform will create or modify the specified resources based on your configuration.
     - Confirm the changes by typing yes when prompted.
 
 5. Verify the Resources:
@@ -83,7 +83,7 @@ In today's digital age, businesses are constantly looking for ways to streamline
 
 6. Destroy the Resources (Optional):
 
-    - If you want to remove the created resources, you can use the command terraform destroy.
+    - If you want to remove the created resources, you can use the command `terraform destroy`.
     - Review the execution plan and confirm the destruction by typing yes when prompted.
 
-Remember to update your Terraform configuration (main.tf) with the appropriate resources and providers for your specific infrastructure requirements.
+Remember to update your Terraform configuration (`main.tf`) with the appropriate resources and providers for your specific infrastructure requirements.
