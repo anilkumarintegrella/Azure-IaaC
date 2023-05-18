@@ -7,21 +7,6 @@ provider "azurerm" {
   }
 }
 
-variable "rg_name" {
-  type    = string
-  default = "rg-anil-vaghari-playground"
-}
-
-variable "location" {
-  type    = string
-  default = "West Europe"
-}
-
-variable "dns_zone" {
-  type    = string
-  default = "anilv.azure.integrella.net"
-}
-
 #App-Vnet
 resource "azurerm_virtual_network" "example" {
   name = "App-vnet"
@@ -31,7 +16,6 @@ resource "azurerm_virtual_network" "example" {
 }
 
 #Subnets of App Vnet
-
 resource "azurerm_subnet" "example" {
   name  = "App-subnet"
   resource_group_name  = var.rg_name
@@ -134,7 +118,6 @@ resource "azurerm_subnet" "example2" {
 
 
 # Public IP for VM-with-Reverse-proxy
-
 resource "azurerm_public_ip" "example" {
   name = "VM-with-Reverse-proxy-PIP"
   resource_group_name = var.rg_name
@@ -142,8 +125,7 @@ resource "azurerm_public_ip" "example" {
   allocation_method   = "Dynamic"
 }
 
-#VM-NSG
-
+# VM-NSG
 resource "azurerm_network_security_group" "example_nsg" {
   name= "VM-with-Reverse-proxy-nsg"
   location    = var.location
@@ -174,8 +156,7 @@ resource "azurerm_network_security_group" "example_nsg" {
   }
 }
 
-#NSG-NIC Association
-
+# NSG-NIC Association
 resource "azurerm_network_interface_security_group_association" "example_nsg_association" {
   network_interface_id= azurerm_network_interface.example_nic.id
   network_security_group_id = azurerm_network_security_group.example_nsg.id
@@ -195,28 +176,28 @@ resource "azurerm_network_interface" "example_nic" {
   }
 }
 
-
+# Create a VM
 resource "azurerm_linux_virtual_machine" "example_linux_vm" {
-    name= "VM-with-Reverse-proxy"
-    location= var.location
-    resource_group_name = var.rg_name
-    size= "Standard_B1ls"
+  name= "VM-with-Reverse-proxy"
+  location= var.location
+  resource_group_name = var.rg_name
+  size= "Standard_B1ls"
 
-    network_interface_ids = [
-        azurerm_network_interface.example_nic.id,
-    ]
-    admin_username = "anil5259"
-    admin_password = "anil@1234567"
-    disable_password_authentication = false
+  network_interface_ids = [
+    azurerm_network_interface.example_nic.id,
+  ]
+  admin_username = "anil5259"
+  admin_password = "anil@1234567"
+  disable_password_authentication = false
 
-    os_disk {
-        name = "vm-os-disk"
-        caching= "ReadWrite"
-        storage_account_type = "Premium_LRS"
-        disk_size_gb         = 40
- }
+  os_disk {
+    name = "vm-os-disk"
+    caching= "ReadWrite"
+    storage_account_type = "Premium_LRS"
+    disk_size_gb         = 40
+  }
 
- source_image_reference {
+    source_image_reference {
     publisher = "Canonical"
     offer   = "UbuntuServer"
     sku    = "18.04-LTS"
@@ -225,24 +206,24 @@ resource "azurerm_linux_virtual_machine" "example_linux_vm" {
 
 }
 
-#DNS Zone 
+# Create DNS Zone 
 
 # resource "azurerm_dns_zone" "dns_zone" {
 #   name= "salesforce5259.com"
 #   resource_group_name = var.rg_name
 # }
 
-#DNS Record Set
+# Add a DNS Record Set
 
-# resource "azurerm_dns_a_record" "dns_zone_record" {
-#   name= "DNS-Zone-Record"
-#   zone_name   = var.dns_zone
-#   resource_group_name = var.rg_name
-#   ttl = 300
-#   target_resource_id  = azurerm_public_ip.example2.id
-# }
+resource "azurerm_dns_a_record" "dns_zone_record" {
+  name= "salesforce-crm"
+  zone_name   = var.dns_zone
+  resource_group_name = var.rg_name
+  ttl = 300
+  target_resource_id  = azurerm_public_ip.example2.id
+}
 
-## Public IP accocited with AppGW
+# Create Public IP accocited with AppGW
 
 resource "azurerm_public_ip" "example2" {
   name = "AppGW-PIP"
@@ -252,7 +233,7 @@ resource "azurerm_public_ip" "example2" {
   allocation_method = "Dynamic"
 }
 
-# Application gateway
+# Create Application gateway
 
 resource "azurerm_application_gateway" "example_application_gateway"{
   name = "AppGW"
@@ -311,6 +292,7 @@ resource "azurerm_application_gateway" "example_application_gateway"{
 
 }
 
+#Associate Backend pool with VM 's NIC
 resource "azurerm_network_interface_application_gateway_backend_address_pool_association" "example" {
   network_interface_id    = azurerm_network_interface.example_nic.id
   ip_configuration_name   = "testconfiguration1"
