@@ -7,7 +7,7 @@ provider "azurerm" {
   }
 }
 
-#App-Vnet
+# Create App-Vnet
 resource "azurerm_virtual_network" "example" {
   name = "App-vnet"
   location   = var.location
@@ -15,7 +15,7 @@ resource "azurerm_virtual_network" "example" {
   address_space = ["10.0.0.0/16"]
 }
 
-#Subnets of App Vnet
+# Subnets of App-Vnet
 resource "azurerm_subnet" "example" {
   name  = "App-subnet"
   resource_group_name  = var.rg_name
@@ -30,92 +30,153 @@ resource "azurerm_subnet" "example2" {
   address_prefixes     = ["10.0.2.0/24"]
 }
 
-# ............
+# Create Hub Vnet
+resource "azurerm_virtual_network" "hub_vnet" {
+  name                = "Hub-vnet"
+  location            = var.location
+  resource_group_name = var.rg_name
+  address_space       = ["10.1.0.0/24"]
+}
 
-# # Hub Vnet
-# resource "azurerm_virtual_network" "hub_vnet" {
-#   name                = "Hub-vnet"
-#   location            = var.location
-#   resource_group_name = var.rg_name
-#   address_space       = ["10.0.0.0/16"]
+#  Create Subnet of Hub Vnet
+resource "azurerm_subnet" "hub_subnet" {
+  name                  = "AzureFirewallSubnet"
+  resource_group_name   = var.rg_name
+  virtual_network_name  = azurerm_virtual_network.hub_vnet.name
+  address_prefixes      = ["10.1.0.0/24"]
+}
+
+# Peering Vnets
+resource "azurerm_virtual_network_peering" "example-2" {
+  name                      = "Hub-Vnet2App-Vnet"
+  resource_group_name       = var.rg_name
+  virtual_network_name      = azurerm_virtual_network.hub_vnet.name
+  remote_virtual_network_id = azurerm_virtual_network.example.id
+}
+
+resource "azurerm_virtual_network_peering" "example-1" {
+  name                      = "App-Vnet2HubVnet"
+  resource_group_name       = var.rg_name
+  virtual_network_name      = azurerm_virtual_network.example.name
+  remote_virtual_network_id = azurerm_virtual_network.hub_vnet.id
+}
+
+# PIP for Firewall
+resource "azurerm_public_ip" "firewall_pip" {
+  name                = "MyFirewall-PIP"
+  location            = var.location
+  resource_group_name = var.rg_name
+  allocation_method   = "Static"
+  sku                 = "Standard"
+}
+
+# Create Firewall
+resource "azurerm_firewall" "example" {
+  name                = "MyFirewall"
+  location            = var.location
+  resource_group_name = var.rg_name
+  sku_name            = "AZFW_VNet"
+  sku_tier            = "Standard"
+
+  ip_configuration {
+    name                 = "configuration-MyFirewall"
+    subnet_id            = azurerm_subnet.hub_subnet.id
+    public_ip_address_id = azurerm_public_ip.firewall_pip.id
+  }
+}
+
+# Get Firewalls Public IP
+data "azurerm_public_ip" "firewall" {
+  name                = azurerm_public_ip.firewall_pip.name
+  resource_group_name = var.rg_name
+}
+
+# Get Firewalls Private ip
+data "azurerm_firewall" "example" {
+  name                = azurerm_firewall.example.name
+  resource_group_name = var.rg_name
+}
+
+# output "firewall_public_ip" {
+#   value = data.azurerm_public_ip.firewall.ip_address
+# }
+# output "firewall_private_ip" {
+#   value = data.azurerm_firewall.example.ip_configuration[0].private_ip_address
 # }
 
-# # Subnet of Hub Vnet
-# resource "azurerm_subnet" "hub_subnet" {
-#   name                  = "AzureFirewallSubnet"
-#   resource_group_name   = var.rg_name
-#   virtual_network_name  = azurerm_virtual_network.hub_vnet.name
-#   address_prefixes      = ["10.0.1.0/24"]
-# }
+# Add NAT Rule
+resource "azurerm_firewall_nat_rule_collection" "example" {
+  name                = "RulesCollection01"
+  azure_firewall_name = azurerm_firewall.example.name
+  resource_group_name = var.rg_name
+  priority            = 200
+  action              = "Dnat"
 
-# # PIP for Firewall
-# resource "azurerm_public_ip" "firewall_pip" {
-#   name                = "MyFirewall-PIP"
-#   location            = var.location
-#   resource_group_name = var.rg_name
-#   allocation_method   = "Static"
-#   sku                 = "Standard"
-# }
+  rule {
+    name = "SSH"
+    source_addresses = ["*",]
+    destination_ports = ["22",]
+    destination_addresses = [data.azurerm_public_ip.firewall.ip_address]
+    translated_port = 22
+    translated_address = "10.0.1.4"
+    protocols = ["TCP",]
+  }
 
-# # Create Firewall
-# resource "azurerm_firewall" "example" {
-#   name                = "MyFirewall"
-#   location            = var.location
-#   resource_group_name = var.rg_name
-#   sku_name            = "AZFW_VNet"
-#   sku_tier            = "Standard"
+   rule {
+    name = "HTTP"
+    source_addresses = ["*",]
+    destination_ports = ["80",]
+    destination_addresses = [data.azurerm_public_ip.firewall.ip_address]
+    translated_port = 80
+    translated_address = "10.0.1.4"
+    protocols = ["TCP",]
+  }
+}
 
-#   ip_configuration {
-#     name                 = "configuration-MyFirewall"
-#     subnet_id            = azurerm_subnet.hub_subnet.id
-#     public_ip_address_id = azurerm_public_ip.firewall_pip.id
-#   }
-# }
+# Create RouteTable
+resource "azurerm_route_table" "example" {
+  name                = "RouteTable01"
+  location            = var.location
+  resource_group_name = var.rg_name
+}
 
-# # Keyvault
+#Add Route
+resource "azurerm_route" "example" {
+  name                = "Route01"
+  resource_group_name = var.rg_name
+  route_table_name    = azurerm_route_table.example.name
+  address_prefix      = "0.0.0.0/0"
+  next_hop_type = "VirtualAppliance"
+  next_hop_in_ip_address = data.azurerm_firewall.example.ip_configuration[0].private_ip_address
+}
+
+#Associate Route table to the VM's Subnet
+resource "azurerm_subnet_route_table_association" "example" {
+  subnet_id      = azurerm_subnet.example.id
+  route_table_id = azurerm_route_table.example.id
+}
+
+
+# # Create Keyvault
 # data "azurerm_client_config" "current" {}
 
 # resource "azurerm_key_vault" "example" {
-#   name                        = "MyKeyvault-anil"
+#   name                        = "MyKeyvault01"
 #   location                    = var.location
 #   resource_group_name         = var.rg_name
 #   enabled_for_disk_encryption = true
 #   tenant_id                   = data.azurerm_client_config.current.tenant_id
 #   soft_delete_retention_days  = 7
 #   purge_protection_enabled    = false
-
 #   sku_name = "standard"
-
 #   access_policy {
 #     tenant_id = data.azurerm_client_config.current.tenant_id
 #     object_id = data.azurerm_client_config.current.object_id
-
 #     key_permissions    = ["Get"]
 #     secret_permissions = ["Get"]
 #     storage_permissions = ["Get"]
 #   }
 # }
-
-# # Route
-# resource "azurerm_route_table" "example" {
-#   name                = "acceptanceTestRouteTable1"
-#   location            = var.location
-#   resource_group_name = var.rg_name
-# }
-
-# resource "azurerm_route" "example" {
-#   name                = "acceptanceTestRoute1-anil"
-#   resource_group_name = var.rg_name
-#   route_table_name    = azurerm_route_table.example.name
-#   address_prefix      = "0.0.0.0/0"
-#   next_hop_type       = "Internet"
-# }
-
-# resource "azurerm_subnet_route_table_association" "example" {
-#   subnet_id      = azurerm_subnet.hub_subnet.id
-#   route_table_id = azurerm_route_table.example.id
-# }
-
 
 # Public IP for VM-with-Reverse-proxy
 resource "azurerm_public_ip" "example" {
@@ -213,15 +274,15 @@ resource "azurerm_linux_virtual_machine" "example_linux_vm" {
 #   resource_group_name = var.rg_name
 # }
 
-# Add a DNS Record Set
+# # Add a DNS Record Set
 
-resource "azurerm_dns_a_record" "dns_zone_record" {
-  name= "salesforce-crm"
-  zone_name   = var.dns_zone
-  resource_group_name = var.rg_name
-  ttl = 300
-  target_resource_id  = azurerm_public_ip.example2.id
-}
+# resource "azurerm_dns_a_record" "dns_zone_record" {
+#   name= "salesforce-crm"
+#   zone_name   = var.dns_zone
+#   resource_group_name = var.rg_name
+#   ttl = 300
+#   target_resource_id  = azurerm_public_ip.example2.id
+# }
 
 # Create Public IP accocited with AppGW
 
@@ -251,20 +312,20 @@ resource "azurerm_application_gateway" "example_application_gateway"{
     subnet_id = azurerm_subnet.example2.id
   }
 
- frontend_port {
-  name = "myFrontendPort"
-  port = 80
- }
+  frontend_port {
+   name = "myFrontendPort"
+   port = 80
+  }
 
- frontend_ip_configuration {
-  name = "myAGIPConfig"
-  #  subnet_id = azurerm_subnet.example2.id
+  frontend_ip_configuration {
+   name = "myAGIPConfig"
+   #subnet_id = azurerm_subnet.example2.id
    public_ip_address_id = azurerm_public_ip.example2.id
- }
+  }
  
- backend_address_pool {
-  name = "example-backend-pool"
- }
+  backend_address_pool {
+   name = "example-backend-pool"
+  }
 
  backend_http_settings {
   name = "myHTTPsetting"
@@ -272,7 +333,6 @@ resource "azurerm_application_gateway" "example_application_gateway"{
   port = 80
   protocol = "Http"
   request_timeout = 20
-
  }
 
  http_listener {
