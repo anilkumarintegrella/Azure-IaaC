@@ -97,13 +97,6 @@ data "azurerm_firewall" "example" {
   resource_group_name = var.rg_name
 }
 
-# output "firewall_public_ip" {
-#   value = data.azurerm_public_ip.firewall.ip_address
-# }
-# output "firewall_private_ip" {
-#   value = data.azurerm_firewall.example.ip_configuration[0].private_ip_address
-# }
-
 # Add NAT Rule
 resource "azurerm_firewall_nat_rule_collection" "example" {
   name                = "RulesCollection01"
@@ -140,7 +133,7 @@ resource "azurerm_route_table" "example" {
   resource_group_name = var.rg_name
 }
 
-#Add Route
+# Add Route
 resource "azurerm_route" "example" {
   name                = "Route01"
   resource_group_name = var.rg_name
@@ -150,33 +143,55 @@ resource "azurerm_route" "example" {
   next_hop_in_ip_address = data.azurerm_firewall.example.ip_configuration[0].private_ip_address
 }
 
-#Associate Route table to the VM's Subnet
+# Associate Route table to the VM's Subnet
 resource "azurerm_subnet_route_table_association" "example" {
   subnet_id      = azurerm_subnet.example.id
   route_table_id = azurerm_route_table.example.id
 }
 
+# Create Keyvault
+data "azurerm_client_config" "current" {}
 
-# # Create Keyvault
-# data "azurerm_client_config" "current" {}
+resource "azurerm_key_vault" "example" {
+  name                        = "KeyVault-IAC"
+  location                    = var.location
+  resource_group_name         = var.rg_name
+  enabled_for_disk_encryption = true
+  tenant_id                   = data.azurerm_client_config.current.tenant_id
+  soft_delete_retention_days  = 7
+  purge_protection_enabled    = false
+  sku_name = "standard"
+  access_policy {
+    tenant_id = data.azurerm_client_config.current.tenant_id
+    object_id = data.azurerm_client_config.current.object_id
+      
+    secret_permissions = [
+      "Set",
+      "Get",
+      "List",
+      "Delete",
+      "Purge",
+      "Recover"
+    ]
+    storage_permissions = [
+      "Backup",
+      "Delete",
+      "Get",
+      "List",
+      "Purge",
+      "Recover",
+      "Restore",
+      "Set",
+    ]
+  }
+}
 
-# resource "azurerm_key_vault" "example" {
-#   name                        = "MyKeyvault01"
-#   location                    = var.location
-#   resource_group_name         = var.rg_name
-#   enabled_for_disk_encryption = true
-#   tenant_id                   = data.azurerm_client_config.current.tenant_id
-#   soft_delete_retention_days  = 7
-#   purge_protection_enabled    = false
-#   sku_name = "standard"
-#   access_policy {
-#     tenant_id = data.azurerm_client_config.current.tenant_id
-#     object_id = data.azurerm_client_config.current.object_id
-#     key_permissions    = ["Get"]
-#     secret_permissions = ["Get"]
-#     storage_permissions = ["Get"]
-#   }
-# }
+# Create a Secret
+resource "azurerm_key_vault_secret" "example" {
+  name         = var.vm_admin_username
+  value        = var.vm_secret
+  key_vault_id = azurerm_key_vault.example.id
+}
 
 # Public IP for VM-with-Reverse-proxy
 resource "azurerm_public_ip" "example" {
@@ -247,8 +262,8 @@ resource "azurerm_linux_virtual_machine" "example_linux_vm" {
   network_interface_ids = [
     azurerm_network_interface.example_nic.id,
   ]
-  admin_username = "anil5259"
-  admin_password = "anil@1234567"
+  admin_username = var.vm_admin_username
+  admin_password = var.vm_admin_password
   disable_password_authentication = false
 
   os_disk {
@@ -319,7 +334,7 @@ resource "azurerm_application_gateway" "example_application_gateway"{
 
   frontend_ip_configuration {
    name = "myAGIPConfig"
-   #subnet_id = azurerm_subnet.example2.id
+   # subnet_id = azurerm_subnet.example2.id
    public_ip_address_id = azurerm_public_ip.example2.id
   }
  
@@ -352,7 +367,7 @@ resource "azurerm_application_gateway" "example_application_gateway"{
 
 }
 
-#Associate Backend pool with VM 's NIC
+# Associate Backend pool with VM 's NIC
 resource "azurerm_network_interface_application_gateway_backend_address_pool_association" "example" {
   network_interface_id    = azurerm_network_interface.example_nic.id
   ip_configuration_name   = "testconfiguration1"
